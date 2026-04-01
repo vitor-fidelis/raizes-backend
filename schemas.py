@@ -1,10 +1,10 @@
-from pydantic import BaseModel,ConfigDict
+from pydantic import BaseModel,ConfigDict, Field
 
 class ClienteCreate(BaseModel):
     nome: str
     cpf: str
     email: str
-    senha: str
+    senha: str = Field(min_length=6, max_length=72)
 
 class ClienteResponse(BaseModel):
     id_cliente: int

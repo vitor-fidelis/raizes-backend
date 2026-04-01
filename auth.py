@@ -11,10 +11,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 60
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 def hash_senha(senha: str):
-    return pwd_context.hash(senha)
+    senha_truncada = senha[:72]
+    return pwd_context.hash(senha_truncada)
 
 def verificar_senha(senha: str, hash: str):
-    return pwd_context.verify(senha, hash)
+    senha_truncada = senha[:72]
+    return pwd_context.verify(senha_truncada, hash)
 
 def criar_token(data: dict):
     to_encode = data.copy()
