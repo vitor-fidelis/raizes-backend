@@ -1,3 +1,11 @@
+"""
+API de gerenciamento de pedidos desenvolvida com FastAPI.
+
+Implementa autenticação JWT, controle de acesso por usuário
+e fluxo completo de pedidos (criação, itens, finalização e pagamento).
+"""
+
+# Inicialização da API e importaçao das dependencias
 from fastapi import FastAPI, Depends, HTTPException
 from typing import List
 from sqlalchemy.orm import Session
@@ -9,10 +17,13 @@ from auth import (
     criar_token,
     verificar_token
 )
+
+# Criação de tabelas no banco (para desenvolvimento, em produção usar migrations)
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+#Dependencia para controle de sessão do banco
 def get_db():
     db = SessionLocal()
     try:
@@ -22,6 +33,8 @@ def get_db():
 
 @app.post("/clientes")
 def criar_cliente(cliente: schemas.ClienteCreate, db: Session = Depends(get_db)):
+
+    # Cria cliente armazenando senha com hash (bcrypt) e truncando para 72 caracteres (limitação do bcrypt)
     novo = models.Cliente(
         nome=cliente.nome,
         cpf=cliente.cpf,
@@ -40,9 +53,12 @@ def listar_clientes(
     user=Depends(verificar_token),
     db: Session = Depends(get_db)
 ):
-    # Retorna lista de clientes (somente para debug/admin minimal)
+    # Retorna lista de clientes 
     return db.query(models.Cliente).all()
+
 @app.post("/login")
+
+# Busca cliente pelo email
 def login(dados: schemas.Login, db: Session = Depends(get_db)):
 
     cliente = db.query(models.Cliente).filter(
@@ -52,9 +68,11 @@ def login(dados: schemas.Login, db: Session = Depends(get_db)):
     if not cliente:
         raise HTTPException(status_code=400, detail="Usuário não encontrado")
 
+    # Verifica senha usando hash(bcrypt)
     if not verificar_senha(dados.senha, cliente.senha):
         raise HTTPException(status_code=400, detail="Senha inválida")
 
+    # Gera token JWT contendo identificação do usuário (email nesse caso)
     token = criar_token({"sub": cliente.email})
 
     return {
@@ -101,12 +119,13 @@ def criar_pedido(
     user=Depends(verificar_token),
     db: Session = Depends(get_db)
 ):
-    # user é o payload do token (espera-se {'sub': email})
+    # Recupera usuário autenticado via token (JWT)
     email = user.get("sub")
     cliente = db.query(models.Cliente).filter(models.Cliente.email == email).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
 
+    # Cria pedido inicial com total zero (itens serão adicionados depois)
     novo = models.Pedido(
         id_cliente=cliente.id_cliente,
         status="aberto",
@@ -126,7 +145,7 @@ def adicionar_item(
     user=Depends(verificar_token),
     db: Session = Depends(get_db)
 ):
-    # Verifica cliente do token e pertence ao pedido
+    # Garante que o pedido pertence ao usuário autenticado
     email = user.get("sub")
     cliente = db.query(models.Cliente).filter(models.Cliente.email == email).first()
     if not cliente:
@@ -149,6 +168,7 @@ def adicionar_item(
     preco_unitario = produto.preco
     item_total = preco_unitario * item.quantidade
 
+    # Cria item vinculado ao pedido
     novo_item = models.ItemPedido(
         id_pedido=id_pedido,
         id_produto=item.id_produto,
@@ -157,6 +177,7 @@ def adicionar_item(
     )
 
     db.add(novo_item)
+
     # Atualiza total do pedido
     pedido.total = (pedido.total or 0) + item_total
 
@@ -164,7 +185,17 @@ def adicionar_item(
     db.refresh(novo_item)
     db.refresh(pedido)
 
-    return {"msg": "Item adicionado", "item": schemas.ItemResponse.model_validate(novo_item), "total_pedido": pedido.total}
+    # Convertemos o objeto SQLAlchemy para um dict simples para evitar dependência
+    # da configuração de ORM do Pydantic (v1 vs v2).
+    item_dict = {
+        "id": novo_item.id,
+        "id_pedido": novo_item.id_pedido,
+        "id_produto": novo_item.id_produto,
+        "quantidade": novo_item.quantidade,
+        "preco": novo_item.preco,
+    }
+
+    return {"msg": "Item adicionado", "item": item_dict, "total_pedido": pedido.total}
 
 @app.post("/pedidos/{id_pedido}/finalizar")
 def finalizar_pedido( 
@@ -172,6 +203,7 @@ def finalizar_pedido(
     user=Depends(verificar_token),
     db: Session = Depends(get_db)
 ):
+    # Apenas o dono do pedido pode finalizar
     email = user.get("sub")
     cliente = db.query(models.Cliente).filter(models.Cliente.email == email).first()
     if not cliente:
@@ -187,7 +219,7 @@ def finalizar_pedido(
     if pedido.status != "aberto":
         raise HTTPException(status_code=400, detail="Pedido já finalizado")
 
-    # Marca como finalizado (o total já foi acumulado ao adicionar itens)
+    # Marca como finalizado (pronto para pagamento)
     pedido.status = "finalizado"
     db.commit()
     db.refresh(pedido)
