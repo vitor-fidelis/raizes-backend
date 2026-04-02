@@ -18,8 +18,7 @@ class Login(BaseModel):
 
 
 class PedidoCreate(BaseModel):
-    # Cria um pedido vazio para o cliente autenticado
-    pass
+    canal: str | None = "BALCAO"
 
 
 class ItemCreate(BaseModel):

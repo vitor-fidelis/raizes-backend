@@ -36,6 +36,9 @@ class Pedido(Base):
     # Valor total acumulado do pedido
     total = Column(Float)
 
+    #canalPedido(BALCÃO = nulo, APP, TOTEM OU WEB )
+    canal = Column(String)
+
 # Entidade que representa produtos disponíveis no sistema
 class Produto(Base):
     __tablename__ = "produtos"

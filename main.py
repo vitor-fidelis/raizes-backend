@@ -7,7 +7,6 @@ e fluxo completo de pedidos (criação, itens, finalização e pagamento).
 
 # Inicialização da API e importaçao das dependencias
 from fastapi import FastAPI, Depends, HTTPException
-from typing import List
 from sqlalchemy.orm import Session
 from database import SessionLocal, engine, Base
 import models, schemas
@@ -115,7 +114,8 @@ def listar_produtos(db: Session = Depends(get_db)):
     return db.query(models.Produto).all()
 
 @app.post("/pedidos")
-def criar_pedido(              
+def criar_pedido(
+    pedido: schemas.PedidoCreate,
     user=Depends(verificar_token),
     db: Session = Depends(get_db)
 ):
@@ -129,7 +129,8 @@ def criar_pedido(
     novo = models.Pedido(
         id_cliente=cliente.id_cliente,
         status="aberto",
-        total=0.0
+        total=0.0,
+        canal=pedido.canal
     )
 
     db.add(novo)
@@ -185,17 +186,7 @@ def adicionar_item(
     db.refresh(novo_item)
     db.refresh(pedido)
 
-    # Convertemos o objeto SQLAlchemy para um dict simples para evitar dependência
-    # da configuração de ORM do Pydantic (v1 vs v2).
-    item_dict = {
-        "id": novo_item.id,
-        "id_pedido": novo_item.id_pedido,
-        "id_produto": novo_item.id_produto,
-        "quantidade": novo_item.quantidade,
-        "preco": novo_item.preco,
-    }
-
-    return {"msg": "Item adicionado", "item": item_dict, "total_pedido": pedido.total}
+    return {"msg": "Item adicionado", "item": schemas.ItemResponse.model_validate(novo_item), "total_pedido": pedido.total}
 
 @app.post("/pedidos/{id_pedido}/finalizar")
 def finalizar_pedido( 
